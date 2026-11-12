@@ -21,6 +21,7 @@ label{display:flex;justify-content:space-between;color:#c4d0df;font-size:12px;ma
 #log{height:180px;overflow:auto;font:11px/1.6 ui-monospace,monospace;color:#aebdd0}.event{padding:5px 0;border-bottom:1px solid #1d2b3e}.event em{color:var(--gold);font-style:normal}
 .species{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #1d2b3e}.dot{width:12px;height:12px;border-radius:50%;box-shadow:0 0 14px currentColor}.species small{display:block;color:var(--muted)}
 .note{color:#9aabc0;font-size:12px;margin-top:12px}.foot{color:#71839a;font-size:11px;margin-top:18px}
+.specimen-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.specimen-stat{background:#0e1928;border:1px solid var(--line);border-radius:9px;padding:8px}.specimen-stat b{display:block;font-size:15px}.specimen-stat span{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}.empty-specimen{color:var(--muted);font-size:12px;line-height:1.6}
 @media(max-width:820px){.top{display:block}.tag{display:inline-block;margin-top:12px}.layout{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
@@ -32,13 +33,14 @@ label{display:flex;justify-content:space-between;color:#c4d0df;font-size:12px;ma
 <div class="layout"><section class="panel">
  <div class="panelhead"><strong>THE HABITAT</strong><span class="muted" id="season">Season: Spring</span></div>
  <canvas id="world" width="900" height="545" aria-label="Artificial ecosystem simulation"></canvas>
- <div class="controls"><button class="primary" id="toggle">Ⅱ Pause</button><button id="step">Step once</button><button id="restart">New world</button><button id="seed">Seed life</button><span class="muted" style="margin:auto 4px">Click the habitat to drop nutrients</span></div>
+ <div class="controls"><button class="primary" id="toggle">Ⅱ Pause</button><button id="step">Step once</button><button id="restart">New world</button><button id="seed">Seed life</button><span class="muted" style="margin:auto 4px">Select an organism · click empty space to add nutrients</span></div>
 </section><aside class="side">
  <section class="panel pad"><h2>WORLD PARAMETERS</h2>
  <label>Mutation rate <span id="mutationValue">12%</span></label><input id="mutation" type="range" min="0" max="40" value="12">
  <label>Food renewal <span id="foodValue">55%</span></label><input id="food" type="range" min="10" max="100" value="55">
  <label>Environmental pressure <span id="pressureValue">45%</span></label><input id="pressure" type="range" min="0" max="100" value="45">
  <div class="note">The sliders alter the rules of the world, not individual creatures. There is no “correct” setting.</div></section>
+ <section class="panel pad"><h2>SELECTED ORGANISM</h2><div id="specimen" class="empty-specimen">Click a creature in the habitat to inspect its traits and current condition.</div></section>
  <section class="panel pad"><h2>DOMINANT LINEAGES</h2><div id="species"></div></section>
  <section class="panel pad"><h2>FIELD NOTES</h2><div id="log"></div></section>
 </aside></div>
@@ -47,13 +49,22 @@ label{display:flex;justify-content:space-between;color:#c4d0df;font-size:12px;ma
 <script>
 (()=>{
 const canvas=document.querySelector('#world'),ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
-const $=id=>document.getElementById(id);let creatures=[],food=[],tick=0,generation=0,nextId=1,running=true,raf,last=0,acc=0,events=[],lineageColors=new Map();
+const $=id=>document.getElementById(id);let creatures=[],food=[],tick=0,generation=0,nextId=1,running=true,raf,last=0,acc=0,events=[],lineageColors=new Map(),selectedId=null;
 const rand=(a,b)=>a+Math.random()*(b-a),clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const traits=()=>({speed:rand(.45,1.25),sense:rand(25,105),greed:rand(.3,1),signal:rand(0,1),color:Math.floor(rand(0,360)),size:rand(2.8,5.5),diet:Math.random()<.5?'grazer':'scavenger'});
 function make(x=rand(20,W-20),y=rand(20,H-20),dna=traits(),lineage=null,gen=0){let c={id:nextId++,x,y,vx:rand(-1,1),vy:rand(-1,1),energy:rand(45,75),age:0,dna,lineage:lineage??nextId,gen,signal:0};if(!lineage)lineageColors.set(c.lineage,dna.color);return c}
 function log(s){events.unshift({t:tick,s});events=events.slice(0,24);$('log').innerHTML=events.map(e=>`<div class="event"><em>t${e.t}</em> ${e.s}</div>`).join('')}
 function seed(n=34){for(let i=0;i<n;i++)creatures.push(make());for(let i=0;i<130;i++)food.push({x:rand(8,W-8),y:rand(8,H-8),v:rand(1,2.5)});log('The first organisms entered the habitat.')}
-function reset(){creatures=[];food=[];tick=0;generation=0;nextId=1;events=[];lineageColors.clear();seed();render()}
+function reset(){creatures=[];food=[];tick=0;generation=0;nextId=1;events=[];selectedId=null;lineageColors.clear();seed();render()}
+function inspect(c){if(!c){$('specimen').innerHTML='Click a creature in the habitat to inspect its traits and current condition.';return}
+ const pct=clamp(c.energy/120*100,0,100);
+ $('specimen').innerHTML=`<div class="muted">Organism #${c.id} · Lineage ${c.lineage}</div><div class="specimen-grid" style="margin-top:10px">
+ <div class="specimen-stat"><b>${Math.round(c.energy)}</b><span>Energy</span></div><div class="specimen-stat"><b>${c.age}</b><span>Age</span></div>
+ <div class="specimen-stat"><b>${c.gen}</b><span>Generation</span></div><div class="specimen-stat"><b>${c.dna.diet}</b><span>Diet type</span></div>
+ <div class="specimen-stat"><b>${c.dna.speed.toFixed(2)}</b><span>Speed</span></div><div class="specimen-stat"><b>${Math.round(c.dna.sense)}</b><span>Food sensing</span></div>
+ <div class="specimen-stat"><b>${c.dna.greed.toFixed(2)}</b><span>Food efficiency</span></div><div class="specimen-stat"><b>${c.dna.signal.toFixed(2)}</b><span>Signal strength</span></div></div>
+ <div class="meter" style="margin-top:12px"><i style="width:${pct}%"></i></div><div class="muted">Energy reserve · ${Math.round(pct)}% of the 120-point scale</div>`;
+}
 function nearestFood(c){let best=null,bd=Infinity;for(const f of food){let d=(f.x-c.x)**2+(f.y-c.y)**2;if(d<bd&&d<c.dna.sense*c.dna.sense){best=f;bd=d}}return best}
 function mutate(d){let n={...d};for(const k of ['speed','sense','greed','signal','size'])if(Math.random()<+$('mutation').value/100)n[k]=clamp(n[k]+rand(-.22,.22),k==='size'?2:0.1,k==='sense'?150:2);if(Math.random()<+$('mutation').value/100)n.color=(n.color+Math.floor(rand(-35,36))+360)%360;return n}
 function step(){tick++;const renewal=+$('food').value/100,pressure=+$('pressure').value/100;
@@ -78,9 +89,11 @@ function render(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#08111c';ctx.fillRect(0,
  ctx.strokeStyle='#132338';ctx.lineWidth=1;for(let x=0;x<W;x+=45){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}for(let y=0;y<H;y+=45){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
  for(const f of food){ctx.fillStyle='#f4ce78';ctx.globalAlpha=.5;ctx.beginPath();ctx.arc(f.x,f.y,f.v+1,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;
  for(const c of creatures){let col=`hsl(${c.dna.color} 78% 66%)`;ctx.shadowBlur=10;ctx.shadowColor=col;ctx.fillStyle=col;ctx.beginPath();ctx.arc(c.x,c.y,c.dna.size,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
- if(c.dna.signal>.72){ctx.strokeStyle=col;ctx.globalAlpha=.22;ctx.beginPath();ctx.arc(c.x,c.y,9+c.dna.signal*9,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1}}
+ if(c.dna.signal>.72){ctx.strokeStyle=col;ctx.globalAlpha=.22;ctx.beginPath();ctx.arc(c.x,c.y,9+c.dna.signal*9,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1}
+ if(c.id===selectedId){ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(c.x,c.y,c.dna.size+6,0,Math.PI*2);ctx.stroke()}}
  $('generation').textContent=generation;$('population').textContent=creatures.length;$('worldAge').textContent=tick;$('speciesCount').textContent=new Set(creatures.map(c=>c.lineage)).size;
  const season=['Spring','Summer','Autumn','Winter'][Math.floor(tick/850)%4];$('season').textContent='Season: '+season;
+ if(selectedId!==null){const selected=creatures.find(c=>c.id===selectedId);if(selected)inspect(selected);else{selectedId=null;inspect(null)}}
  const counts={};for(const c of creatures)counts[c.lineage]=(counts[c.lineage]||0)+1;
  $('species').innerHTML=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([id,n])=>`<div class="species"><i class="dot" style="color:hsl(${lineageColors.get(+id)||180} 78% 66%);background:currentColor"></i><div>Lineage ${id}<small>${n} organism${n===1?'':'s'} · ${Math.max(...creatures.filter(c=>c.lineage==id).map(c=>c.gen))} generations deep</small></div></div>`).join('')||'<span class="muted">The habitat is quiet.</span>';
 }
@@ -88,7 +101,11 @@ function loop(t){if(!running)return;let dt=Math.min(80,t-last);last=t;acc+=dt;wh
 function toggle(){running=!running;$('toggle').textContent=running?'Ⅱ Pause':'▶ Resume';if(running){last=performance.now();raf=requestAnimationFrame(loop)}else cancelAnimationFrame(raf)}
 $('toggle').onclick=toggle;$('step').onclick=()=>{if(running)toggle();step();render()};$('restart').onclick=()=>{if(!running)toggle();reset()};$('seed').onclick=()=>{for(let i=0;i<8;i++)creatures.push(make());log('Eight new founders arrived.');render()};
 for(const id of ['mutation','food','pressure'])$(id).oninput=()=>$(id+'Value').textContent=$(id).value+'%';
-canvas.onclick=e=>{let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;for(let i=0;i<18;i++)food.push({x:x+rand(-25,25),y:y+rand(-25,25),v:rand(1,3)});log('A nutrient bloom appeared at the marked location.');render()};
+canvas.onclick=e=>{let r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+ let hit=null,dist=Infinity;for(const c of creatures){let d=Math.hypot(c.x-x,c.y-y);if(d<Math.max(13,c.dna.size+7)&&d<dist){hit=c;dist=d}}
+ if(hit){selectedId=hit.id;inspect(hit);log(`Organism #${hit.id} selected for observation.`)}
+ else{selectedId=null;inspect(null);for(let i=0;i<18;i++)food.push({x:x+rand(-25,25),y:y+rand(-25,25),v:rand(1,3)});log('A nutrient bloom appeared at the marked location.')}
+ render()};
 reset();last=performance.now();raf=requestAnimationFrame(loop);
 })();
 </script></body></html>
