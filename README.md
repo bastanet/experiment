@@ -1,5 +1,20 @@
 # The Unwritten World
 
-An experimental artificial-life sandbox exploring simple organisms, inherited traits, mutation, cooperation signals, and environmental pressure.
+An experimental artificial-life sandbox exploring simple organisms, inherited traits, mutation, weak social signals, and environmental pressure.
 
-The first prototype is a self-contained browser simulation. More soon.
+## Run it
+
+Open [index.html](./index.html) in a modern browser. The prototype is self-contained: no dependencies, build step, server, or account required.
+
+## Observe
+
+- Organisms seek nutrients, spend energy, age, and reproduce.
+- Offspring inherit traits with configurable mutation.
+- Lineages persist across generations and compete under changing environmental pressure.
+- Select any organism in the habitat to inspect its energy, age, generation, and inherited traits.
+- Click empty habitat to add a local nutrient bloom.
+- Pause the simulation or advance it one tick at a time.
+
+## Important
+
+This is a deliberately small toy model. Its lineages and behaviours are outcomes of programmed rules, not evidence of consciousness or open-ended biological evolution.
