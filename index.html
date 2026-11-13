@@ -51,8 +51,8 @@ label{display:flex;justify-content:space-between;color:#c4d0df;font-size:12px;ma
 const canvas=document.querySelector('#world'),ctx=canvas.getContext('2d'),W=canvas.width,H=canvas.height;
 const $=id=>document.getElementById(id);let creatures=[],food=[],tick=0,generation=0,nextId=1,running=true,raf,last=0,acc=0,events=[],lineageColors=new Map(),selectedId=null;
 const rand=(a,b)=>a+Math.random()*(b-a),clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
-const traits=()=>({speed:rand(.45,1.25),sense:rand(25,105),greed:rand(.3,1),signal:rand(0,1),color:Math.floor(rand(0,360)),size:rand(2.8,5.5),diet:Math.random()<.5?'grazer':'scavenger'});
-function make(x=rand(20,W-20),y=rand(20,H-20),dna=traits(),lineage=null,gen=0){let c={id:nextId++,x,y,vx:rand(-1,1),vy:rand(-1,1),energy:rand(45,75),age:0,dna,lineage:lineage??nextId,gen,signal:0};if(!lineage)lineageColors.set(c.lineage,dna.color);return c}
+const traits=()=>({speed:rand(.45,1.25),sense:rand(25,105),greed:rand(.3,1),signal:rand(0,1),color:Math.floor(rand(0,360)),size:rand(2.8,5.5),diet:Math.random()<.5?'grazer':'scavenger',memory:rand(.25,1)});
+function make(x=rand(20,W-20),y=rand(20,H-20),dna=traits(),lineage=null,gen=0){let c={id:nextId++,x,y,vx:rand(-1,1),vy:rand(-1,1),energy:rand(45,75),age:0,dna,lineage:lineage??nextId,gen,signal:0,memories:[]};if(!lineage)lineageColors.set(c.lineage,dna.color);return c}
 function log(s){events.unshift({t:tick,s});events=events.slice(0,24);$('log').innerHTML=events.map(e=>`<div class="event"><em>t${e.t}</em> ${e.s}</div>`).join('')}
 function seed(n=34){for(let i=0;i<n;i++)creatures.push(make());for(let i=0;i<130;i++)food.push({x:rand(8,W-8),y:rand(8,H-8),v:rand(1,2.5)});log('The first organisms entered the habitat.')}
 function reset(){creatures=[];food=[];tick=0;generation=0;nextId=1;events=[];selectedId=null;lineageColors.clear();seed();render()}
@@ -62,17 +62,19 @@ function inspect(c){if(!c){$('specimen').innerHTML='Click a creature in the habi
  <div class="specimen-stat"><b>${Math.round(c.energy)}</b><span>Energy</span></div><div class="specimen-stat"><b>${c.age}</b><span>Age</span></div>
  <div class="specimen-stat"><b>${c.gen}</b><span>Generation</span></div><div class="specimen-stat"><b>${c.dna.diet}</b><span>Diet type</span></div>
  <div class="specimen-stat"><b>${c.dna.speed.toFixed(2)}</b><span>Speed</span></div><div class="specimen-stat"><b>${Math.round(c.dna.sense)}</b><span>Food sensing</span></div>
- <div class="specimen-stat"><b>${c.dna.greed.toFixed(2)}</b><span>Food efficiency</span></div><div class="specimen-stat"><b>${c.dna.signal.toFixed(2)}</b><span>Signal strength</span></div></div>
+ <div class="specimen-stat"><b>${c.dna.greed.toFixed(2)}</b><span>Food efficiency</span></div><div class="specimen-stat"><b>${c.dna.signal.toFixed(2)}</b><span>Signal strength</span></div><div class="specimen-stat"><b>${c.dna.memory.toFixed(2)}</b><span>Memory capacity</span></div><div class="specimen-stat"><b>${c.memories.length}</b><span>Active memories</span></div></div>
  <div class="meter" style="margin-top:12px"><i style="width:${pct}%"></i></div><div class="muted">Energy reserve · ${Math.round(pct)}% of the 120-point scale</div>`;
 }
 function nearestFood(c){let best=null,bd=Infinity;for(const f of food){let d=(f.x-c.x)**2+(f.y-c.y)**2;if(d<bd&&d<c.dna.sense*c.dna.sense){best=f;bd=d}}return best}
-function mutate(d){let n={...d};for(const k of ['speed','sense','greed','signal','size'])if(Math.random()<+$('mutation').value/100)n[k]=clamp(n[k]+rand(-.22,.22),k==='size'?2:0.1,k==='sense'?150:2);if(Math.random()<+$('mutation').value/100)n.color=(n.color+Math.floor(rand(-35,36))+360)%360;return n}
+function mutate(d){let n={...d};for(const k of ['speed','sense','greed','signal','size','memory'])if(Math.random()<+$('mutation').value/100)n[k]=clamp(n[k]+rand(-.22,.22),k==='size'?2:0.1,k==='sense'?150:2);if(Math.random()<+$('mutation').value/100)n.color=(n.color+Math.floor(rand(-35,36))+360)%360;return n}
 function step(){tick++;const renewal=+$('food').value/100,pressure=+$('pressure').value/100;
  if(Math.random()<renewal*.9&&food.length<260)food.push({x:rand(8,W-8),y:rand(8,H-8),v:rand(.8,2.2)});
  const born=[];
  for(const c of creatures){c.age++;c.energy-=.105+pressure*.12+c.dna.speed*.025;
   let target=nearestFood(c),dx=0,dy=0;
-  if(target){dx=target.x-c.x;dy=target.y-c.y;let d=Math.hypot(dx,dy)||1;c.vx+=(dx/d)*.055*c.dna.speed;c.vy+=(dy/d)*.055*c.dna.speed;if(d<8){c.energy+=target.v*13*c.dna.greed;food.splice(food.indexOf(target),1);}}
+  c.memories=c.memories.filter(m=>tick-m.at<150+c.dna.memory*550);
+  if(target){dx=target.x-c.x;dy=target.y-c.y;let d=Math.hypot(dx,dy)||1;c.vx+=(dx/d)*.055*c.dna.speed;c.vy+=(dy/d)*.055*c.dna.speed;if(d<8&&food.includes(target)){c.energy+=target.v*13*c.dna.greed;food.splice(food.indexOf(target),1);let old=c.memories.find(m=>Math.hypot(m.x-target.x,m.y-target.y)<24);if(old){old.x=target.x;old.y=target.y;old.at=tick}else{c.memories.push({x:target.x,y:target.y,at:tick});let cap=1+Math.floor(c.dna.memory*3);while(c.memories.length>cap)c.memories.shift()}}}
+  else if(c.memories.length){let memory=c.memories.reduce((a,b)=>b.at>a.at?b:a),age=tick-memory.at,fade=1-age/(150+c.dna.memory*550),d=Math.hypot(memory.x-c.x,memory.y-c.y)||1;c.vx+=(memory.x-c.x)/d*.028*c.dna.memory*fade;c.vy+=(memory.y-c.y)/d*.028*c.dna.memory*fade}
   else {c.vx+=rand(-.13,.13);c.vy+=rand(-.13,.13)}
   // Signals are a weak attraction/repulsion field: nearby organisms bias movement toward similar signal levels.
   let sx=0,sy=0;for(const o of creatures){if(o===c)continue;let ox=o.x-c.x,oy=o.y-c.y,d2=ox*ox+oy*oy;if(d2<48*48&&d2>1){let influence=(c.dna.signal-o.dna.signal)*.0007;sx+=ox*influence;sy+=oy*influence}}
